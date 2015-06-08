@@ -3,6 +3,7 @@
 #
 # Copyright (C) 2013 Radim Rehurek <me@radimrehurek.com>
 # Licensed under the GNU LGPL v2.1 - http://www.gnu.org/licenses/lgpl.html
+from numpy.linalg import norm
 
 
 """
@@ -141,6 +142,9 @@ except ImportError:
 
         """
         labels = []
+        if model.renormalized:
+            raise NotImplemented
+        
         if model.negative:
             # precompute negative labels
             labels = zeros(model.negative + 1)
@@ -182,13 +186,21 @@ def train_sg_pair(model, word, word2, alpha, labels, train_w1=True, train_w2=Tru
             if w != word.index:
                 word_indices.append(w)
         l2b = model.syn1neg[word_indices]  # 2d matrix, k+1 x layer1_size
-        fb = 1. / (1. + exp(-dot(l1, l2b.T)))  # propagate hidden -> output
-        gb = (labels - fb) * alpha  # vector of error gradients multiplied by the learning rate
+        if model.renormalized:
+            fb = dot(l1, l2b.T)  # propagate hidden -> output
+            gb = alpha / (fb+labels-1)  # vector of error gradients multiplied by the learning rate
+        else:
+            fb = 1. / (1. + exp(-dot(l1, l2b.T)))  # propagate hidden -> output
+            gb = (labels - fb) * alpha  # vector of error gradients multiplied by the learning rate
         if train_w1:
             model.syn1neg[word_indices] += outer(gb, l1)  # learn hidden -> output
+            if model.renormalized:
+                model.syn1neg[word_indices] /= norm(model.syn1neg[word_indices], axis=1).reshape(-1,1)
         neu1e += dot(gb, l2b)  # save error
     if train_w2:
         model.syn0[word2.index] += neu1e  # learn input -> hidden
+        if model.renormalized:
+            model.syn0[word2.index] /= norm(model.syn0[word2.index])
     return neu1e
 
 
@@ -244,7 +256,7 @@ class Word2Vec(utils.SaveLoad):
 
     """
     def __init__(self, sentences=None, size=100, alpha=0.025, window=5, min_count=5,
-        sample=0, seed=1, workers=1, min_alpha=0.0001, sg=1, hs=1, negative=0,
+        sample=0, seed=1, workers=1, min_alpha=0.0001, sg=1, hs=1, negative=0, renormalized=False,
         cbow_mean=0, hashfxn=hash, iter=1):
         """
         Initialize the model from an iterable of `sentences`. Each sentence is a
@@ -306,6 +318,7 @@ class Word2Vec(utils.SaveLoad):
         self.min_alpha = min_alpha
         self.hs = hs
         self.negative = negative
+        self.renormalized = renormalized
         self.cbow_mean = int(cbow_mean)
         self.hashfxn = hashfxn
         self.iter = iter
@@ -457,8 +470,10 @@ class Word2Vec(utils.SaveLoad):
             import warnings
             warnings.warn("C extension compilation failed, training will be slow. Install a C compiler and reinstall gensim for fast training.")
         logger.info("training model with %i workers on %i vocabulary and %i features, "
-            "using 'skipgram'=%s 'hierarchical softmax'=%s 'subsample'=%s and 'negative sampling'=%s" %
-            (self.workers, len(self.vocab), self.layer1_size, self.sg, self.hs, self.sample, self.negative))
+            "using 'skipgram'=%s 'hierarchical softmax'=%s 'subsample'=%s, 'negative sampling'=%s "
+            "and 'renormalized'=%s" %
+            (self.workers, len(self.vocab), self.layer1_size, self.sg, self.hs, 
+             self.sample, self.negative, self.renormalized))
 
         if not self.vocab:
             raise RuntimeError("you must first build vocabulary before training the model")

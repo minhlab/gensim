@@ -42,6 +42,12 @@ ctypedef unsigned long long (*fast_sentence_sg_neg_ptr) (
     const np.uint32_t word2_index, const REAL_t alpha, REAL_t *work,
     unsigned long long next_random) nogil
 
+ctypedef unsigned long long (*fast_sentence_sg_rneg_ptr) (
+    const int negative, np.uint32_t *table, unsigned long long table_len,
+    REAL_t *syn0, REAL_t *syn1neg, const int size, const np.uint32_t word_index,
+    const np.uint32_t word2_index, const REAL_t alpha, REAL_t *work,
+    unsigned long long next_random) nogil
+
 ctypedef void (*fast_sentence_cbow_hs_ptr) (
     const np.uint32_t *word_point, const np.uint8_t *word_code, int codelens[MAX_SENTENCE_LEN],
     REAL_t *neu1,  REAL_t *syn0, REAL_t *syn1, const int size,
@@ -62,6 +68,7 @@ cdef snrm2_ptr snrm2=<snrm2_ptr>PyCObject_AsVoidPtr(fblas.snrm2._cpointer)  # sq
 cdef sscal_ptr sscal=<sscal_ptr>PyCObject_AsVoidPtr(fblas.sscal._cpointer) # x = alpha * x
 cdef fast_sentence_sg_hs_ptr fast_sentence_sg_hs
 cdef fast_sentence_sg_neg_ptr fast_sentence_sg_neg
+cdef fast_sentence_sg_rneg_ptr fast_sentence_sg_rneg
 cdef fast_sentence_cbow_hs_ptr fast_sentence_cbow_hs
 cdef fast_sentence_cbow_neg_ptr fast_sentence_cbow_neg
 
@@ -267,6 +274,140 @@ cdef unsigned long long fast_sentence2_sg_neg(
 
     for a in range(size):
         syn0[row1 + a] += work[a]
+
+    return next_random
+
+cdef unsigned long long fast_sentence0_sg_rneg(
+    const int negative, np.uint32_t *table, unsigned long long table_len,
+    REAL_t *syn0, REAL_t *syn1neg, const int size, const np.uint32_t word_index,
+    const np.uint32_t word2_index, const REAL_t alpha, REAL_t *work,
+    unsigned long long next_random) nogil:
+
+    cdef long long a
+    cdef long long row1 = word2_index * size, row2
+    cdef unsigned long long modulo = 281474976710655ULL
+    cdef REAL_t f, g, label, inv_norm
+    cdef np.uint32_t target_index
+    cdef int d
+
+    memset(work, 0, size * cython.sizeof(REAL_t))
+
+    for d in range(negative+1):
+        if d == 0:
+            target_index = word_index
+            label = ONEF
+        else:
+            target_index = table[(next_random >> 16) % table_len]
+            next_random = (next_random * <unsigned long long>25214903917ULL + 11) & modulo
+            if target_index == word_index:
+                continue
+            label = <REAL_t>0.0
+
+        row2 = target_index * size
+        f = <REAL_t>dsdot(&size, &syn0[row1], &ONE, &syn1neg[row2], &ONE)
+        g = alpha / (f + label - 1)
+        saxpy(&size, &g, &syn1neg[row2], &ONE, work, &ONE)
+        saxpy(&size, &g, &syn0[row1], &ONE, &syn1neg[row2], &ONE)
+        inv_norm = 1/snrm2(&size, &syn1neg[row2], &ONE)
+        sscal(&size, &inv_norm, &syn1neg[row2], &ONE)
+
+    saxpy(&size, &ONEF, work, &ONE, &syn0[row1], &ONE)
+    inv_norm = 1/snrm2(&size, &syn0[row1], &ONE)
+    sscal(&size, &inv_norm, &syn0[row1], &ONE)
+
+    return next_random
+
+cdef unsigned long long fast_sentence1_sg_rneg(
+    const int negative, np.uint32_t *table, unsigned long long table_len,
+    REAL_t *syn0, REAL_t *syn1neg, const int size, const np.uint32_t word_index,
+    const np.uint32_t word2_index, const REAL_t alpha, REAL_t *work,
+    unsigned long long next_random) nogil:
+
+    cdef long long a
+    cdef long long row1 = word2_index * size, row2
+    cdef unsigned long long modulo = 281474976710655ULL
+    cdef REAL_t f, g, label, inv_norm
+    cdef np.uint32_t target_index
+    cdef int d
+
+    memset(work, 0, size * cython.sizeof(REAL_t))
+
+    for d in range(negative+1):
+
+        if d == 0:
+            target_index = word_index
+            label = ONEF
+        else:
+            target_index = table[(next_random >> 16) % table_len]
+            next_random = (next_random * <unsigned long long>25214903917ULL + 11) & modulo
+            if target_index == word_index:
+                continue
+            label = <REAL_t>0.0
+
+        row2 = target_index * size
+        f = <REAL_t>sdot(&size, &syn0[row1], &ONE, &syn1neg[row2], &ONE)
+        g = alpha / (f + label - 1)
+        saxpy(&size, &g, &syn1neg[row2], &ONE, work, &ONE)
+        saxpy(&size, &g, &syn0[row1], &ONE, &syn1neg[row2], &ONE)
+        inv_norm = 1/snrm2(&size, &syn1neg[row2], &ONE)
+        sscal(&size, &inv_norm, &syn1neg[row2], &ONE)
+
+    saxpy(&size, &ONEF, work, &ONE, &syn0[row1], &ONE)
+    inv_norm = 1/snrm2(&size, &syn0[row1], &ONE)
+    sscal(&size, &inv_norm, &syn0[row1], &ONE)
+
+    return next_random
+
+cdef unsigned long long fast_sentence2_sg_rneg(
+    const int negative, np.uint32_t *table, unsigned long long table_len,
+    REAL_t *syn0, REAL_t *syn1neg, const int size, const np.uint32_t word_index,
+    const np.uint32_t word2_index, const REAL_t alpha, REAL_t *work,
+    unsigned long long next_random) nogil:
+
+    cdef long long a
+    cdef long long row1 = word2_index * size, row2
+    cdef unsigned long long modulo = 281474976710655ULL
+    cdef REAL_t f, g, label, inv_norm
+    cdef np.uint32_t target_index
+    cdef int d
+
+    for a in range(size):
+        work[a] = <REAL_t>0.0
+
+    for d in range(negative+1):
+
+        if d == 0:
+            target_index = word_index
+            label = ONEF
+        else:
+            target_index = table[(next_random >> 16) % table_len]
+            next_random = (next_random * <unsigned long long>25214903917ULL + 11) & modulo
+            if target_index == word_index:
+                continue
+            label = <REAL_t>0.0
+
+        row2 = target_index * size
+        f = <REAL_t>0.0
+        for a in range(size):
+            f += syn0[row1 + a] * syn1neg[row2 + a]
+        g = alpha / (f+label-1)
+        for a in range(size):
+            work[a] += g * syn1neg[row2 + a]
+        inv_norm = <REAL_t>0.0
+        for a in range(size):
+            syn1neg[row2 + a] += g * syn0[row1 + a]
+            inv_norm += syn1neg[row2 + a]**2
+        inv_norm = 1 / inv_norm
+        for a in range(size):
+            syn1neg[row2 + a] *= inv_norm
+
+    inv_norm = <REAL_t>0.0
+    for a in range(size):
+        syn0[row1 + a] += work[a]
+        inv_norm += syn0[row1 + a]**2
+    inv_norm = 1 / inv_norm
+    for a in range(size):
+        syn0[row1 + a] *= inv_norm
 
     return next_random
 
@@ -580,6 +721,7 @@ cdef unsigned long long fast_sentence2_cbow_neg(
 def train_sentence_sg(model, sentence, alpha, _work):
     cdef int hs = model.hs
     cdef int negative = model.negative
+    cdef int renormalized = model.renormalized
 
     cdef REAL_t *syn0 = <REAL_t *>(np.PyArray_DATA(model.syn0))
     cdef REAL_t *work
@@ -651,7 +793,10 @@ def train_sentence_sg(model, sentence, alpha, _work):
                 if hs:
                     fast_sentence_sg_hs(points[i], codes[i], codelens[i], syn0, syn1, size, indexes[j], _alpha, work)
                 if negative:
-                    next_random = fast_sentence_sg_neg(negative, table, table_len, syn0, syn1neg, size, indexes[i], indexes[j], _alpha, work, next_random)
+                    if renormalized:
+                        next_random = fast_sentence_sg_rneg(negative, table, table_len, syn0, syn1neg, size, indexes[i], indexes[j], _alpha, work, next_random)
+                    else:
+                        next_random = fast_sentence_sg_neg(negative, table, table_len, syn0, syn1neg, size, indexes[i], indexes[j], _alpha, work, next_random)
 
     return result
 
@@ -765,12 +910,14 @@ def init():
     if (abs(d_res - expected) < 0.0001):
         fast_sentence_sg_hs = fast_sentence0_sg_hs
         fast_sentence_sg_neg = fast_sentence0_sg_neg
+        fast_sentence_sg_rneg = fast_sentence0_sg_rneg
         fast_sentence_cbow_hs = fast_sentence0_cbow_hs
         fast_sentence_cbow_neg = fast_sentence0_cbow_neg
         return 0  # double
     elif (abs(p_res[0] - expected) < 0.0001):
         fast_sentence_sg_hs = fast_sentence1_sg_hs
         fast_sentence_sg_neg = fast_sentence1_sg_neg
+        fast_sentence_sg_rneg = fast_sentence1_sg_rneg
         fast_sentence_cbow_hs = fast_sentence1_cbow_hs
         fast_sentence_cbow_neg = fast_sentence1_cbow_neg
         return 1  # float
@@ -779,6 +926,7 @@ def init():
         # actually, the BLAS is so messed up we'll probably have segfaulted above and never even reach here
         fast_sentence_sg_hs = fast_sentence2_sg_hs
         fast_sentence_sg_neg = fast_sentence2_sg_neg
+        fast_sentence_sg_rneg = fast_sentence2_sg_rneg
         fast_sentence_cbow_hs = fast_sentence2_cbow_hs
         fast_sentence_cbow_neg = fast_sentence2_cbow_neg
         return 2
