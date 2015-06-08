@@ -470,7 +470,7 @@ class Word2Vec(utils.SaveLoad):
             import warnings
             warnings.warn("C extension compilation failed, training will be slow. Install a C compiler and reinstall gensim for fast training.")
         logger.info("training model with %i workers on %i vocabulary and %i features, "
-            "using 'skipgram'=%s 'hierarchical softmax'=%s 'subsample'=%s, 'negative sampling'=%s "
+            "using 'skipgram'=%s, 'hierarchical softmax'=%s, 'subsample'=%s, 'negative sampling'=%s, "
             "and 'renormalized'=%s" %
             (self.workers, len(self.vocab), self.layer1_size, self.sg, self.hs, 
              self.sample, self.negative, self.renormalized))

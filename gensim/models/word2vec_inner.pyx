@@ -308,11 +308,11 @@ cdef unsigned long long fast_sentence0_sg_rneg(
         g = alpha / (f + label - 1)
         saxpy(&size, &g, &syn1neg[row2], &ONE, work, &ONE)
         saxpy(&size, &g, &syn0[row1], &ONE, &syn1neg[row2], &ONE)
-        inv_norm = 1/snrm2(&size, &syn1neg[row2], &ONE)
+        inv_norm = 1.0/(1+2*g*f+g**2)**0.5
         sscal(&size, &inv_norm, &syn1neg[row2], &ONE)
 
     saxpy(&size, &ONEF, work, &ONE, &syn0[row1], &ONE)
-    inv_norm = 1/snrm2(&size, &syn0[row1], &ONE)
+    inv_norm = 1.0/snrm2(&size, &syn0[row1], &ONE)
     sscal(&size, &inv_norm, &syn0[row1], &ONE)
 
     return next_random
@@ -349,11 +349,11 @@ cdef unsigned long long fast_sentence1_sg_rneg(
         g = alpha / (f + label - 1)
         saxpy(&size, &g, &syn1neg[row2], &ONE, work, &ONE)
         saxpy(&size, &g, &syn0[row1], &ONE, &syn1neg[row2], &ONE)
-        inv_norm = 1/snrm2(&size, &syn1neg[row2], &ONE)
+        inv_norm = 1.0/(1+2*g*f+g**2)**0.5
         sscal(&size, &inv_norm, &syn1neg[row2], &ONE)
-
+ 
     saxpy(&size, &ONEF, work, &ONE, &syn0[row1], &ONE)
-    inv_norm = 1/snrm2(&size, &syn0[row1], &ONE)
+    inv_norm = 1.0/snrm2(&size, &syn0[row1], &ONE)
     sscal(&size, &inv_norm, &syn0[row1], &ONE)
 
     return next_random
@@ -390,25 +390,22 @@ cdef unsigned long long fast_sentence2_sg_rneg(
         f = <REAL_t>0.0
         for a in range(size):
             f += syn0[row1 + a] * syn1neg[row2 + a]
-        g = alpha / (f+label-1)
+        g = alpha / (f+label-1 + 1e-16)
+        inv_norm = 1.0/(1+2*g*f+g**2)**0.5
         for a in range(size):
             work[a] += g * syn1neg[row2 + a]
-        inv_norm = <REAL_t>0.0
         for a in range(size):
             syn1neg[row2 + a] += g * syn0[row1 + a]
-            inv_norm += syn1neg[row2 + a]**2
-        inv_norm = 1 / inv_norm
-        for a in range(size):
             syn1neg[row2 + a] *= inv_norm
-
+ 
     inv_norm = <REAL_t>0.0
     for a in range(size):
         syn0[row1 + a] += work[a]
         inv_norm += syn0[row1 + a]**2
-    inv_norm = 1 / inv_norm
+    inv_norm = 1 / (inv_norm + 1e-16)
     for a in range(size):
         syn0[row1 + a] *= inv_norm
-
+ 
     return next_random
 
 cdef void fast_sentence0_cbow_hs(
@@ -888,6 +885,7 @@ def init():
     """
     global fast_sentence_sg_hs
     global fast_sentence_sg_neg
+    global fast_sentence_sg_rneg
     global fast_sentence_cbow_hs
     global fast_sentence_cbow_neg
 
